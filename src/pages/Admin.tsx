@@ -110,7 +110,7 @@ export const Admin: React.FC<AdminProps> = ({ onClose }) => {
   
   const [isAdding, setIsAdding] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  
   
   // File objects for uploading
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -332,7 +332,6 @@ export const Admin: React.FC<AdminProps> = ({ onClose }) => {
       alert("Upload failed. Please verify that Supabase is properly configured.");
     } finally {
       setIsUploading(false);
-      setUploadProgress(0);
     }
   };
 

@@ -4,14 +4,12 @@ import Footer from './components/Footer';
 import Lightbox from './components/Lightbox';
 import Home from './pages/Home';
 import Admin from './pages/Admin';
-import { useSiteData } from './hooks/useSiteData';
 import type { MediaItem } from './utils/siteContent';
 import { supabase } from './supabaseClient';
 
 const App: React.FC = () => {
   const [lightboxItem, setLightboxItem] = useState<MediaItem | null>(null);
   const [isAdminMode, setIsAdminMode] = useState(false);
-  const { tracks } = useSiteData();
 
   useEffect(() => {
     const logVisit = async () => {
