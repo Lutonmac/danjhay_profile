@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { siteContent, type Track, type EventItem, type MediaItem } from '../utils/siteContent';
+import { siteContent, type Track, type EventItem, type MediaItem, type MerchItem } from '../utils/siteContent';
 
 export const useSiteData = () => {
   const [tracks, setTracks] = useState<Track[]>(siteContent.tracks);
   const [events, setEvents] = useState<EventItem[]>(siteContent.events);
   const [media, setMedia] = useState<MediaItem[]>(siteContent.media);
+  const [merch, setMerch] = useState<MerchItem[]>(siteContent.merch);
   const [bioImage, setBioImage] = useState<string>(siteContent.bio.aboutImage);
 
   const fetchTracks = async () => {
@@ -32,6 +33,20 @@ export const useSiteData = () => {
   const fetchMedia = async () => {
     const { data } = await supabase.from('gallery').select('*');
     if (data) setMedia(data.length > 0 ? (data as MediaItem[]) : siteContent.media);
+  };
+
+  const fetchMerch = async () => {
+    const { data } = await supabase.from('merch').select('*');
+    if (data && data.length > 0) {
+      const normalizedMerch = data.map(m => ({
+        ...m,
+        imageUrl: m.imageUrl || m.imageurl || '',
+        whatsAppTemplate: m.whatsAppTemplate || m.whatsapptemplate || ''
+      }));
+      setMerch(normalizedMerch as MerchItem[]);
+    } else {
+      setMerch(siteContent.merch);
+    }
   };
 
   const [bookingEmail, setBookingEmail] = useState<string>(siteContent.bio.email);
@@ -61,6 +76,7 @@ export const useSiteData = () => {
     fetchTracks();
     fetchEvents();
     fetchMedia();
+    fetchMerch();
     fetchProfile();
 
     const channelName = `schema-db-changes-${Math.random()}`;
@@ -68,6 +84,7 @@ export const useSiteData = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tracks' }, () => fetchTracks())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => fetchEvents())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery' }, () => fetchMedia())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'merch' }, () => fetchMerch())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, () => fetchProfile())
       .subscribe();
 
@@ -76,5 +93,5 @@ export const useSiteData = () => {
     };
   }, []);
 
-  return { tracks, events, media, bioImage, bookingEmail, bookingPhone, bookingWhatsApp, heroLabel, fullName, tagline, description };
+  return { tracks, events, media, merch, bioImage, bookingEmail, bookingPhone, bookingWhatsApp, heroLabel, fullName, tagline, description };
 };

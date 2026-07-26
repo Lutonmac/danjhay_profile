@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import type { Track, EventItem, MediaItem } from '../utils/siteContent';
-import { ArrowLeft, Plus, Trash2, Save, X, Lock, AlertCircle, LogOut } from 'lucide-react';
+import type { Track, EventItem, MediaItem, MerchItem } from '../utils/siteContent';
+import { ArrowLeft, Plus, Trash2, Save, X, Lock, AlertCircle, LogOut, User, Mail, Sparkles } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useSiteData } from '../hooks/useSiteData';
 
@@ -14,7 +14,7 @@ export const Admin: React.FC<AdminProps> = ({ onClose }) => {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
 
-  const [activeTab, setActiveTab] = useState<'tracks' | 'events' | 'gallery' | 'analytics' | 'booking'>('tracks');
+  const [activeTab, setActiveTab] = useState<'tracks' | 'events' | 'gallery' | 'merch' | 'analytics' | 'booking'>('tracks');
   const [totalViews, setTotalViews] = useState<number>(0);
   const [monthlyViews, setMonthlyViews] = useState<number>(0);
 
@@ -44,7 +44,7 @@ export const Admin: React.FC<AdminProps> = ({ onClose }) => {
   }, [activeTab, isAuthenticated]);
 
   // We use useSiteData to automatically keep the Admin UI in sync with Firestore
-  const { tracks: customTracks, events: customEvents, media: customMedia, bioImage: profileImage, bookingEmail, bookingPhone, bookingWhatsApp, heroLabel, fullName, tagline, description } = useSiteData();
+  const { tracks: customTracks, events: customEvents, media: customMedia, merch: customMerch, bioImage: profileImage, bookingEmail, bookingPhone, bookingWhatsApp, heroLabel, fullName, tagline, description } = useSiteData();
   
   const [editBookingEmail, setEditBookingEmail] = useState('');
   const [editBookingPhone, setEditBookingPhone] = useState('');
@@ -127,6 +127,64 @@ export const Admin: React.FC<AdminProps> = ({ onClose }) => {
   const [newMedia, setNewMedia] = useState<Partial<MediaItem>>({
     title: '', caption: '', date: '', type: 'image'
   });
+
+  const [newMerch, setNewMerch] = useState<Partial<MerchItem>>({
+    name: '', price: '', badge: '', imageUrl: '', whatsAppTemplate: ''
+  });
+  const [merchFile, setMerchFile] = useState<File | null>(null);
+
+  const handleAddMerch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMerch.name || !newMerch.price) {
+      alert("Please enter a Product Name and Price.");
+      return;
+    }
+    setIsUploading(true);
+    try {
+      let finalImageUrl = newMerch.imageUrl || '';
+      if (merchFile) {
+        const fileExt = merchFile.name.split('.').pop();
+        const fileName = `merch-${Date.now()}.${fileExt}`;
+        const { error: uploadErr } = await supabase.storage.from('media').upload(fileName, merchFile);
+        if (uploadErr) throw uploadErr;
+        const { data: publicUrlData } = supabase.storage.from('media').getPublicUrl(fileName);
+        finalImageUrl = publicUrlData.publicUrl;
+      }
+
+      const defaultTemplate = `Hi Danjhay, I would like to order the '${newMerch.name}'!`;
+
+      const { error } = await supabase.from('merch').insert([{
+        id: `m_${Date.now()}`,
+        name: newMerch.name,
+        price: newMerch.price,
+        badge: newMerch.badge || 'IN STOCK',
+        imageUrl: finalImageUrl || '/images/merch/luxury_hoodie.png',
+        whatsAppTemplate: newMerch.whatsAppTemplate || defaultTemplate
+      }]);
+
+      if (error) throw error;
+      alert("Merch item added successfully!");
+      setIsAdding(false);
+      setNewMerch({ name: '', price: '', badge: '', imageUrl: '', whatsAppTemplate: '' });
+      setMerchFile(null);
+    } catch (err: any) {
+      console.error("Error adding merch:", err);
+      alert("Failed to add merch: " + err.message);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDeleteMerch = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this merch item?")) return;
+    try {
+      const { error } = await supabase.from('merch').delete().eq('id', id);
+      if (error) throw error;
+      alert("Merch item deleted successfully!");
+    } catch (err: any) {
+      alert("Failed to delete merch item: " + err.message);
+    }
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -406,9 +464,10 @@ export const Admin: React.FC<AdminProps> = ({ onClose }) => {
         </div>
 
         <div className="admin-tabs">
-          <button onClick={() => { setActiveTab('tracks'); setIsAdding(false); }} className={`btn ${activeTab === 'tracks' ? 'btn-primary' : 'btn-secondary'}`}>MUSIC & PROFILE</button>
+          <button onClick={() => { setActiveTab('tracks'); setIsAdding(false); }} className={`btn ${activeTab === 'tracks' ? 'btn-primary' : 'btn-secondary'}`}>MUSIC</button>
           <button onClick={() => { setActiveTab('events'); setIsAdding(false); }} className={`btn ${activeTab === 'events' ? 'btn-primary' : 'btn-secondary'}`}>EVENTS</button>
           <button onClick={() => { setActiveTab('gallery'); setIsAdding(false); }} className={`btn ${activeTab === 'gallery' ? 'btn-primary' : 'btn-secondary'}`}>GALLERY</button>
+          <button onClick={() => { setActiveTab('merch'); setIsAdding(false); }} className={`btn ${activeTab === 'merch' ? 'btn-primary' : 'btn-secondary'}`}>MERCH DROP</button>
           <button onClick={() => { setActiveTab('booking'); setIsAdding(false); }} className={`btn ${activeTab === 'booking' ? 'btn-primary' : 'btn-secondary'}`}>SITE SETTINGS</button>
           <button onClick={() => { setActiveTab('analytics'); setIsAdding(false); }} className={`btn ${activeTab === 'analytics' ? 'btn-primary' : 'btn-secondary'}`}>ANALYTICS</button>
         </div>
@@ -441,72 +500,115 @@ export const Admin: React.FC<AdminProps> = ({ onClose }) => {
         {activeTab === 'booking' && (
           <div>
             <div style={styles.sectionTop}>
-              <h2>Site Settings</h2>
+              <div>
+                <h2>Site Settings & Brand Identity</h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
+                  Manage your homepage hero section, portrait image, and booking contact channels.
+                </p>
+              </div>
             </div>
 
-            <div className="panel" style={{ padding: '30px', borderColor: 'var(--border-color)', marginBottom: '40px' }}>
+            {/* 1. Profile Portrait Settings */}
+            <div className="panel" style={{ padding: '30px', borderColor: 'var(--border-color)', marginBottom: '30px', background: 'rgba(255, 255, 255, 0.02)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                <User size={20} color="var(--primary-red)" />
+                <h3 style={{ fontSize: '1.2rem', margin: 0 }}>Hero Portrait Image</h3>
+              </div>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '20px', fontSize: '0.85rem' }}>
+                Update your primary portrait photo displayed on the homepage Hero section.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ flex: '1 1 250px' }}>
+                  <label style={{ ...styles.label, marginBottom: '8px', display: 'block' }}>Upload New Photo</label>
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={handleProfileImageChange}
+                    style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', width: '100%' }}
+                  />
+                </div>
+                {profileImage && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: '90px', height: '110px', flexShrink: 0, borderRadius: '8px', overflow: 'hidden', border: '2px solid var(--primary-red)', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+                      <img src={profileImage} alt="Profile preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '4px 10px', borderRadius: '20px', fontWeight: 600 }}>
+                      ACTIVE HERO PHOTO
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 2. Hero Bio Settings */}
+            <div className="panel" style={{ padding: '30px', borderColor: 'var(--border-color)', marginBottom: '30px', background: 'rgba(255, 255, 255, 0.02)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h3 style={{ fontSize: '1.25rem', margin: 0 }}>Bio Settings</h3>
-                <button onClick={handleSaveBioSettings} className="btn btn-primary" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Sparkles size={20} color="var(--primary-red)" />
+                  <h3 style={{ fontSize: '1.2rem', margin: 0 }}>Hero Text & Bio</h3>
+                </div>
+                <button onClick={handleSaveBioSettings} className="btn btn-primary" style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '8px 18px' }}>
                   <Save size={16} /> SAVE BIO
                 </button>
               </div>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: '20px', fontSize: '0.9rem' }}>
-                Update the hero section text on the homepage.
-              </p>
 
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Hero Label</label>
-                <input type="text" value={editHeroLabel} onChange={(e) => setEditHeroLabel(e.target.value)} style={styles.input} placeholder="e.g. DANJHAY" />
+              <div className="grid-2" style={{ gap: '20px', marginBottom: '20px' }}>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Hero Sub-Header / Label</label>
+                  <input type="text" value={editHeroLabel} onChange={(e) => setEditHeroLabel(e.target.value)} style={styles.input} placeholder="e.g. DANJHAY" />
+                </div>
+
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Full Name / Main Title</label>
+                  <input type="text" value={editFullName} onChange={(e) => setEditFullName(e.target.value)} style={styles.input} placeholder="e.g. DANJHAY" />
+                </div>
               </div>
 
               <div style={styles.formGroup}>
-                <label style={styles.label}>Full Name / Main Title</label>
-                <input type="text" value={editFullName} onChange={(e) => setEditFullName(e.target.value)} style={styles.input} placeholder="e.g. DANJHAY" />
+                <label style={styles.label}>Tagline (Roles & Skills)</label>
+                <input type="text" value={editTagline} onChange={(e) => setEditTagline(e.target.value)} style={styles.input} placeholder="e.g. MUSIC ARTIST • DIGITAL MARKETER • CREATIVE STRATEGIST" />
               </div>
 
               <div style={styles.formGroup}>
-                <label style={styles.label}>Tagline</label>
-                <input type="text" value={editTagline} onChange={(e) => setEditTagline(e.target.value)} style={styles.input} placeholder="e.g. MUSIC ARTIST • DIGITAL MARKETER" />
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Description</label>
-                <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} style={{...styles.input, height: '100px', resize: 'vertical'}} placeholder="Short bio description..." />
+                <label style={styles.label}>Hero Bio Description</label>
+                <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} style={{...styles.input, height: '110px', resize: 'vertical', lineHeight: '1.5'}} placeholder="Short bio description..." />
               </div>
             </div>
 
-            <div className="panel" style={{ padding: '30px', borderColor: 'var(--border-color)', marginBottom: '40px' }}>
+            {/* 3. Booking Contact Channels */}
+            <div className="panel" style={{ padding: '30px', borderColor: 'var(--border-color)', marginBottom: '30px', background: 'rgba(255, 255, 255, 0.02)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h3 style={{ fontSize: '1.25rem', margin: 0 }}>Booking Settings</h3>
-                <button onClick={handleSaveBookingSettings} className="btn btn-primary" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <Save size={16} /> SAVE SETTINGS
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Mail size={20} color="var(--primary-red)" />
+                  <h3 style={{ fontSize: '1.2rem', margin: 0 }}>Booking & Contact Channels</h3>
+                </div>
+                <button onClick={handleSaveBookingSettings} className="btn btn-primary" style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '8px 18px' }}>
+                  <Save size={16} /> SAVE CONTACTS
                 </button>
               </div>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: '20px', fontSize: '0.9rem' }}>
-                Update the contact information displayed in the "Booking & Inquiries" section of your homepage. Note that the WhatsApp Business Phone Number is just for display, while the WhatsApp Direct Link is the actual URL users are sent to when they click the button.
-              </p>
 
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Email Address</label>
-                <input
-                  type="email"
-                  value={editBookingEmail}
-                  onChange={(e) => setEditBookingEmail(e.target.value)}
-                  style={styles.input}
-                  placeholder="e.g. ayomide@danjhay.com"
-                />
-              </div>
+              <div className="grid-2" style={{ gap: '20px', marginBottom: '20px' }}>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Official Booking Email</label>
+                  <input
+                    type="email"
+                    value={editBookingEmail}
+                    onChange={(e) => setEditBookingEmail(e.target.value)}
+                    style={styles.input}
+                    placeholder="e.g. ayomide@danjhay.com"
+                  />
+                </div>
 
-              <div style={styles.formGroup}>
-                <label style={styles.label}>WhatsApp Business Phone Number (Display Text)</label>
-                <input
-                  type="text"
-                  value={editBookingPhone}
-                  onChange={(e) => setEditBookingPhone(e.target.value)}
-                  style={styles.input}
-                  placeholder="e.g. +2349069510888"
-                />
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>WhatsApp Phone (Display Text)</label>
+                  <input
+                    type="text"
+                    value={editBookingPhone}
+                    onChange={(e) => setEditBookingPhone(e.target.value)}
+                    style={styles.input}
+                    placeholder="e.g. +2349069510888"
+                  />
+                </div>
               </div>
 
               <div style={styles.formGroup}>
@@ -523,33 +625,151 @@ export const Admin: React.FC<AdminProps> = ({ onClose }) => {
           </div>
         )}
 
-        {activeTab === 'tracks' && (
-          <>
-            <div className="panel" style={{ marginBottom: '40px', borderColor: 'var(--border-color)' }}>
-          <h2 style={{ fontSize: '1.25rem', marginBottom: '16px', borderBottom: 'none' }}>Profile Settings</h2>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.85rem' }}>
-                Update your primary portrait image shown on the hero section. Synced via Firebase Cloud Storage.
-              </p>
-              <input 
-                type="file" 
-                accept="image/*"
-                onChange={handleProfileImageChange}
-                style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', width: '100%', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}
-              />
+        {activeTab === 'merch' && (
+          <div>
+            <div style={styles.sectionTop}>
+              <div>
+                <h2>The Danjhay Collection (Merch Drops)</h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
+                  Manage merchandise items, badges, pricing, and WhatsApp order templates.
+                </p>
+              </div>
+              {!isAdding && (
+                <button onClick={() => setIsAdding(true)} className="btn btn-primary" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <Plus size={16} /> ADD NEW MERCH DROP
+                </button>
+              )}
             </div>
-            {profileImage && (
-              <div style={{ width: '80px', height: '100px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-                <img src={profileImage} alt="Profile preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+
+            {isAdding && (
+              <div className="panel" style={{ ...styles.formPanel, marginBottom: '30px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Add New Merchandise Drop</h3>
+                  <button onClick={() => setIsAdding(false)} className="btn btn-secondary" style={{ padding: '6px 12px' }}>
+                    <X size={16} /> CANCEL
+                  </button>
+                </div>
+                <form onSubmit={handleAddMerch}>
+                  <div className="grid-2" style={{ gap: '20px', marginBottom: '20px' }}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Product Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={newMerch.name}
+                        onChange={(e) => setNewMerch({ ...newMerch, name: e.target.value })}
+                        style={styles.input}
+                        placeholder='e.g. "God’s Gangster" Luxury Hoodie'
+                      />
+                    </div>
+
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Price *</label>
+                      <input
+                        type="text"
+                        required
+                        value={newMerch.price}
+                        onChange={(e) => setNewMerch({ ...newMerch, price: e.target.value })}
+                        style={styles.input}
+                        placeholder="e.g. ₦28,500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid-2" style={{ gap: '20px', marginBottom: '20px' }}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Badge Tag (Optional)</label>
+                      <input
+                        type="text"
+                        value={newMerch.badge}
+                        onChange={(e) => setNewMerch({ ...newMerch, badge: e.target.value })}
+                        style={styles.input}
+                        placeholder="e.g. PRE-ORDER NOW, LIMITED EDITION, IN STOCK"
+                      />
+                    </div>
+
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Product Image File or Image URL</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            setMerchFile(e.target.files[0]);
+                          }
+                        }}
+                        style={{ ...styles.input, paddingTop: '8px' }}
+                      />
+                      <input
+                        type="url"
+                        value={newMerch.imageUrl}
+                        onChange={(e) => setNewMerch({ ...newMerch, imageUrl: e.target.value })}
+                        style={{ ...styles.input, marginTop: '8px' }}
+                        placeholder="Or enter direct image URL (e.g. https://...)"
+                      />
+                    </div>
+                  </div>
+
+                  <div style={styles.formGroup}>
+                    <label style={styles.label}>WhatsApp Pre-filled Order Message Template</label>
+                    <textarea
+                      value={newMerch.whatsAppTemplate}
+                      onChange={(e) => setNewMerch({ ...newMerch, whatsAppTemplate: e.target.value })}
+                      style={{ ...styles.input, height: '80px', resize: 'vertical' }}
+                      placeholder="e.g. Hi Danjhay, I would like to order the 'God's Gangster' Luxury Hoodie!"
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                    <button type="button" onClick={() => setIsAdding(false)} className="btn btn-secondary">
+                      CANCEL
+                    </button>
+                    <button type="submit" disabled={isUploading} className="btn btn-primary" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <Save size={16} /> {isUploading ? 'UPLOADING...' : 'SAVE MERCH DROP'}
+                    </button>
+                  </div>
+                </form>
               </div>
             )}
-          </div>
-        </div>
 
-        <div>
-          <div style={styles.sectionTop}>
-            <h2>Custom Tracks</h2>
+            <div className="grid-2" style={{ gap: '20px' }}>
+              {(customMerch || []).map((item) => (
+                <div key={item.id} className="panel" style={{ padding: '20px', display: 'flex', gap: '16px', alignItems: 'center', borderColor: 'var(--border-color)' }}>
+                  <div style={{ width: '80px', height: '80px', flexShrink: 0, borderRadius: '8px', overflow: 'hidden', background: '#111', border: '1px solid var(--border-color)' }}>
+                    <img src={item.imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <h4 style={{ margin: 0, fontSize: '1rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</h4>
+                      {item.badge && (
+                        <span style={{ fontSize: '0.65rem', background: 'var(--primary-red)', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontWeight: 600, flexShrink: 0 }}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ color: 'var(--primary-red)', fontWeight: 700, margin: '0 0 6px 0', fontSize: '0.95rem' }}>{item.price}</p>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      WhatsApp: "{item.whatsAppTemplate}"
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteMerch(item.id)}
+                    className="btn btn-secondary"
+                    style={{ padding: '8px 12px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+                    title="Delete Merch"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'tracks' && (
+          <div>
+            <div style={styles.sectionTop}>
+              <h2>Custom Tracks</h2>
             {!isAdding && (
               <button onClick={() => setIsAdding(true)} className="btn btn-primary">
                 <Plus size={16} /> ADD NEW TRACK
@@ -715,7 +935,6 @@ export const Admin: React.FC<AdminProps> = ({ onClose }) => {
             </div>
           )}
         </div>
-        </>
         )}
 
         {activeTab === 'events' && (

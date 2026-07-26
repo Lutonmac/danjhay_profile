@@ -11,7 +11,7 @@ interface HomeProps {
 
 const Home: React.FC<HomeProps> = ({ setLightboxItem }) => {
   const content = siteContent;
-  const { events, media, bioImage, bookingEmail, bookingPhone, bookingWhatsApp, heroLabel, fullName, tagline, description } = useSiteData();
+  const { events, media, merch, bioImage, bookingEmail, bookingPhone, bookingWhatsApp, heroLabel, fullName, tagline, description } = useSiteData();
 
   // Contact Form States
   const [formData, setFormData] = useState({
@@ -236,7 +236,7 @@ const Home: React.FC<HomeProps> = ({ setLightboxItem }) => {
           </div>
 
           <div className="grid-4" style={{ marginTop: '40px' }}>
-            {content.merch.map((prod) => (
+            {(merch && merch.length > 0 ? merch : content.merch).map((prod) => (
               <div key={prod.id} className="panel product-card product-card-wrapper" style={styles.productCard}>
                 <div style={styles.productImageWrapper}>
                   <img src={prod.imageUrl} alt={prod.name} className="product-image" style={styles.productImage} />
